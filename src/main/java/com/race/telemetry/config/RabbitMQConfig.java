@@ -10,8 +10,11 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     public static final String EXCHANGE_NAME = "race.telemetry.exchange";
+    public static final String DLX_NAME = "race.telemetry.dlx";
+
     public static final String LEADERBOARD_QUEUE = "q.race.leaderboard";
     public static final String NOTIFICATIONS_QUEUE = "q.race.notifications";
+    public static final String DEAD_LETTER_QUEUE = "q.race.dlq";
 
     private static final int messageTTL = 2 * 60 * 1000;
 
@@ -21,14 +24,34 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public DirectExchange deadLetterExchange() {
+        return new DirectExchange(DLX_NAME);
+    }
+
+    @Bean
+    public Queue deadLetterQueue() {
+        return QueueBuilder.durable(DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    public Binding deadLetterBinding(Queue deadLetterQueue, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with("dead-letter-key");
+    }
+
+    @Bean
     public Queue leaderboardQueue() {
-        return QueueBuilder.durable(LEADERBOARD_QUEUE).build();
+        return QueueBuilder.durable(LEADERBOARD_QUEUE)
+                .deadLetterExchange(DLX_NAME)
+                .deadLetterRoutingKey("dead-letter-key")
+                .build();
     }
 
     @Bean
     public Queue notificationsQueue() {
         return QueueBuilder.durable(NOTIFICATIONS_QUEUE)
                 .ttl(messageTTL)
+                .deadLetterExchange(DLX_NAME)
+                .deadLetterRoutingKey("dead-letter-key")
                 .build();
     }
 
